@@ -291,6 +291,29 @@ class TestCLIAndBatch(unittest.TestCase):
                 lines = f_out.readlines()
                 self.assertEqual(len(lines), 3)
 
+    def test_cli_evaluate_json(self):
+        import io
+        out = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = out
+        try:
+            res = cli.main(["evaluate", "--mw", "320.5", "--logp", "2.8", "--json"])
+            self.assertEqual(res, 0)
+        finally:
+            sys.stdout = old_stdout
+
+        data = json.loads(out.getvalue())
+        self.assertIn("lipinski", data)
+        self.assertIn("qed", data)
+
+    def test_cli_sample_csv_batch(self):
+        sample_path = ROOT_DIR / "sample.csv"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_csv = os.path.join(tmpdir, "output.csv")
+            ret = cli.main(["batch", "--input", str(sample_path), "--output", out_csv])
+            self.assertEqual(ret, 0)
+            self.assertTrue(os.path.exists(out_csv))
+
 
 if __name__ == "__main__":
     unittest.main()

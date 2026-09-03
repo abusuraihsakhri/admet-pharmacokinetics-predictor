@@ -227,10 +227,12 @@ def build_parser() -> argparse.ArgumentParser:
     eval_p.add_argument("--mr", type=float, default=75.0, help="Molar refractivity")
     eval_p.add_argument("--pka-base", type=float, default=None, help="Most basic pKa")
     eval_p.add_argument("--pka-acid", type=float, default=None, help="Most acidic pKa")
+    eval_p.add_argument("--json", action="store_true", help="Output results in JSON format")
 
     # Reference drug lookup
     ref_p = sub.add_parser("ref", help="Evaluate a reference drug by name")
     ref_p.add_argument("name", choices=list(REFERENCE_DRUGS.keys()), help="Reference drug name")
+    ref_p.add_argument("--json", action="store_true", help="Output results in JSON format")
 
     # Batch CSV processing
     batch_p = sub.add_parser("batch", help="Batch evaluate molecules from a CSV file")
@@ -248,6 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
     pk_p.add_argument("--tau", type=float, default=12.0, help="Dosing interval tau (hr) for multi-dose")
     pk_p.add_argument("--doses", type=int, default=7, help="Number of doses for multi-dose")
     pk_p.add_argument("--duration", type=float, default=24.0, help="Simulation duration (hr)")
+    pk_p.add_argument("--json", action="store_true", help="Output results in JSON format")
 
     return parser
 

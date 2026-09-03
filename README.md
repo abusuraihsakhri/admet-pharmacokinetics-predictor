@@ -1,101 +1,125 @@
-# Admet Pharmacokinetics Predictor
+# ADMET & Pharmacokinetics Predictor Engine
 
-> **Domain:** Computational Biology & AI Drug Discovery  
-> **Reference Guidelines & Standards:** `wwPDB, IUPAC & CLSI Computational Guidelines`
+A Python computational chemistry, medicinal chemistry, and pharmacokinetics evaluation engine. Evaluates small molecule drug-likeness rules (Lipinski Rule of 5, Veber, Egan, Ghose, Muegge, Lead-likeness), quantitative drug-likeness (QED), Central Nervous System Multiparameter Optimization (CNS MPO), absorption/distribution/metabolism/excretion/toxicity (ADMET) risks, and one-compartment pharmacokinetic concentration-time simulations.
 
-<div align="center">
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
-![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
-![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
-
-</div>
+Requires Python standard library only (zero external runtime dependencies).
 
 ---
 
-## 📖 What It Does
+## Features
 
-**Admet Pharmacokinetics Predictor** is an advanced analytical and computational platform implementing Lipinski Rule of 5, Veber, QED drug-likeness & blood-brain barrier permeability.
+- **Drug-Likeness Rules & Filtering:**
+  - **Lipinski Rule of 5:** MW $\le$ 500 Da, LogP $\le$ 5.0, HBD $\le$ 5, HBA $\le$ 10.
+  - **Veber Filter:** Rotatable bonds $\le$ 10, TPSA $\le$ 140 $\text{\AA}^2$.
+  - **Egan, Ghose, Muegge (Bayer), & Lead-Likeness Filters.**
+- **Quantitative Estimation of Drug-Likeness (QED):** Bickerton et al. asymmetric desirability function across 8 physicochemical descriptors.
+- **CNS Multiparameter Optimization (CNS MPO):** Wager et al. 6-parameter scoring function (0-6.0 scale) and predicted LogBB brain penetration likelihood.
+- **In-Silico ADMET Property Profiling:**
+  - **Absorption:** Human Intestinal Absorption (HIA %), Caco-2 permeability, P-gp substrate/inhibition risk.
+  - **Distribution:** Plasma protein binding (PPB %), volume of distribution ($V_{d,\text{ss}}$).
+  - **Metabolism:** CYP450 inhibition risk profiling (CYP1A2, CYP2C9, CYP2C19, CYP2D6, CYP3A4).
+  - **Excretion & Toxicity:** Intrinsic clearance, elimination half-life, hERG cardiotoxicity, DILI hepatotoxicity, Ames mutagenicity.
+- **Pharmacokinetic (PK) Simulator:**
+  - Single-dose oral absorption model (Bateman function).
+  - IV bolus elimination model.
+  - Multi-dose steady-state oral kinetics ($C_{\text{max}}$, $C_{\text{min}}$, $C_{\text{ss,avg}}$, accumulation ratio $R$).
+- **Reference Drug Library:** Built-in benchmarking profiles for Aspirin, Caffeine, Ibuprofen, Atorvastatin, Imatinib, Morphine, Vancomycin, Metformin, and Diazepam.
+- **Batch CSV Processing:** High-throughput candidate library evaluation.
 
 ---
 
-## ⚙️ Key Capabilities & Algorithmic Modules
+## Installation & Requirements
 
-- **Deterministic Calculation Engine**: Strict compliance with standard reference formulations and thresholds.
-- **Risk & Urgency Classification**: Multi-tier categorization with automated clinical/operational action recommendations.
-- **Validation & Guardrails**: Rigorous input bounds checking and anomaly detection.
+- Python 3.10+ (tested on 3.10, 3.11, 3.12)
+- Zero external runtime dependencies. `pytest` is optional for running tests.
 
----
-
-## 💻 CLI Quickstart & Usage
-
-### 1. Guided Interactive Mode
 ```bash
-python cli.py
+git clone https://github.com/abusuraihsakhri/admet-pharmacokinetics-predictor.git
+cd admet-pharmacokinetics-predictor
 ```
 
-### 2. Direct Parameterized Evaluation
+---
+
+## CLI Usage
+
+### 1. Evaluate Single Molecule
 ```bash
-python cli.py --interactive <value> --demo <value> --json <value> --name <value>
+python cli.py evaluate --name Candidate-01 --mw 320.5 --logp 2.8 --hbd 2 --hba 4 --tpsa 60.0
+```
+Output as JSON:
+```bash
+python cli.py evaluate --name Candidate-01 --mw 320.5 --logp 2.8 --json
 ```
 
-### Parameter Reference
-- `--interactive`: Specifies input measurement or parameter value.
-- `--demo`: Specifies input measurement or parameter value.
-- `--json`: Specifies input measurement or parameter value.
-- `--name`: Specifies input measurement or parameter value.
-- `--mw`: Specifies input measurement or parameter value.
-- `--logp`: Specifies input measurement or parameter value.
-- `--hbd`: Specifies input measurement or parameter value.
-- `--hba`: Specifies input measurement or parameter value.
-- `--tpsa`: Specifies input measurement or parameter value.
-- `--rotatable`: Specifies input measurement or parameter value.
+### 2. Reference Drug Benchmark
+```bash
+python cli.py ref Aspirin
+python cli.py ref Imatinib --json
+python cli.py --demo
+```
 
-### Input Data Schema
+### 3. Pharmacokinetic Simulation
+Simulate oral single dose:
+```bash
+python cli.py pk-sim --route oral --dose 100 --f 0.85 --ka 1.2 --ke 0.15 --vd 25
+```
+Simulate multi-dose regimen:
+```bash
+python cli.py pk-sim --route multi --dose 250 --f 0.80 --ka 1.0 --ke 0.10 --vd 30 --tau 12 --doses 7 --json
+```
 
-| Field | Description | Requirement |
-|:------|:------------|:------------|
-| `task_id` | Parameter / observation metric | Required |
-| `target_identifier` | Parameter / observation metric | Required |
-| `primary_metric` | Parameter / observation metric | Required |
-| `secondary_metric` | Parameter / observation metric | Required |
-| `is_critical_flag` | Parameter / observation metric | Required |
-| `status_descriptor` | Parameter / observation metric | Required |
-
----
-
-## 🛡️ Security & Enterprise Architecture
-
-* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
-* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
-* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
+### 4. Batch CSV Evaluation
+```bash
+python cli.py batch --input sample.csv --output results.csv
+```
 
 ---
 
-## 🧪 Testing & Verification
+## Python API Quickstart
 
-Run the automated test suite:
+```python
+from admet_predictor import MoleculeProperties, ADMETPredictor, PharmacokineticSimulator
+
+# 1. Evaluate small molecule properties
+mol = MoleculeProperties(
+    name="Candidate-A",
+    mw=325.4,
+    logp=2.4,
+    hbd=1,
+    hba=4,
+    tpsa=55.0,
+    rotatable_bonds=4,
+    aromatic_rings=2,
+    heavy_atoms=23,
+    molar_refractivity=78.0,
+)
+
+report = ADMETPredictor.evaluate_candidate(mol)
+print(f"Lipinski Pass: {report.lipinski.passes} (Violations: {report.lipinski.violations})")
+print(f"QED Score: {report.qed.qed_score:.3f} [{report.qed.druglikeness_grade}]")
+print(f"CNS MPO Score: {report.cns_mpo.score:.2f} [{report.cns_mpo.cns_permeability_likelihood}]")
+print(f"Overall Score: {report.overall_druglikeness_score:.1f} / 100")
+
+# 2. Simulate single-dose oral PK profile
+sim = PharmacokineticSimulator.simulate_oral_single(
+    dose_mg=100.0,
+    bioavailability_f=0.85,
+    ka_hr=1.2,
+    ke_hr=0.15,
+    vd_l=25.0,
+)
+print(f"Cmax: {sim.cmax_mg_l:.3f} mg/L at Tmax: {sim.tmax_hr:.2f} hr | t1/2: {sim.half_life_hr:.2f} hr")
+```
+
+---
+
+## Running Tests
+
+Run the test suite using standard `unittest` or `pytest`:
 
 ```bash
+python test_admet_predictor.py
+# or
 pytest -v
 ```
 
-Execute high-throughput batch simulation benchmarks:
-
-```bash
-python simulator.py --tasks 1000 --concurrency 8
-```
-
----
-
-## 🐳 Container Deployment
-
-```bash
-docker build -t admet-pharmacokinetics-predictor .
-docker run -p 8000:8000 admet-pharmacokinetics-predictor
-```
