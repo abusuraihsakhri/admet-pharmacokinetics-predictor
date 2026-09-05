@@ -11,7 +11,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
+from pathlib import Path
 from typing import Optional, List
 
 from admet_predictor import (
@@ -227,6 +229,8 @@ def build_parser() -> argparse.ArgumentParser:
     eval_p.add_argument("--mr", type=float, default=75.0, help="Molar refractivity")
     eval_p.add_argument("--pka-base", type=float, default=None, help="Most basic pKa")
     eval_p.add_argument("--pka-acid", type=float, default=None, help="Most acidic pKa")
+    eval_p.add_argument("--fsp3", type=float, default=0.35, help="Fraction of sp3 hybridized carbons (0-1)")
+    eval_p.add_argument("--charge", type=int, default=0, help="Net formal charge at pH 7.4")
     eval_p.add_argument("--json", action="store_true", help="Output results in JSON format")
 
     # Reference drug lookup
@@ -289,6 +293,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             molar_refractivity=args.mr,
             pka_base=args.pka_base,
             pka_acid=args.pka_acid,
+            fsp3=args.fsp3,
+            charge=args.charge,
         )
         rep = ADMETPredictor.evaluate_candidate(mol)
         if args.json:
@@ -299,46 +305,73 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.command == "batch":
         try:
-            with open(args.input, "r", newline="", encoding="utf-8-sig") as f_in:
+            # Resolve and validate paths to prevent path traversal
+            input_path = Path(args.input).resolve()
+            output_path = Path(args.output).resolve()
+
+            # Ensure input file exists and is a file
+            if not input_path.is_file():
+                print(f"Error: Input file not found: {args.input}", file=sys.stderr)
+                return 1
+
+            with open(input_path, "r", newline="", encoding="utf-8-sig") as f_in:
                 reader = csv.DictReader(f_in)
                 rows = list(reader)
+
+            if not rows:
+                print("Warning: Input CSV contains no data rows.", file=sys.stderr)
+                return 1
+
             out_rows = []
-            for r in rows:
-                mol = MoleculeProperties(
-                    name=r.get("name", "Unknown"),
-                    mw=float(r.get("mw", 300.0)),
-                    logp=float(r.get("logp", 2.0)),
-                    hbd=int(r.get("hbd", 2)),
-                    hba=int(r.get("hba", 4)),
-                    tpsa=float(r.get("tpsa", 60.0)),
-                    rotatable_bonds=int(r.get("rotatable_bonds", 4)),
-                    aromatic_rings=int(r.get("aromatic_rings", 2)),
-                    heavy_atoms=int(r.get("heavy_atoms", 22)),
-                    molar_refractivity=float(r.get("molar_refractivity", 70.0)),
-                )
-                rep = ADMETPredictor.evaluate_candidate(mol)
-                out_rows.append({
-                    "name": mol.name,
-                    "mw": mol.mw,
-                    "logp": mol.logp,
-                    "lipinski_passes": rep.lipinski.passes,
-                    "lipinski_violations": rep.lipinski.violations,
-                    "veber_passes": rep.veber.passes,
-                    "qed_score": rep.qed.qed_score,
-                    "cns_mpo_score": rep.cns_mpo.score,
-                    "hia_pct": rep.admet_prediction.hia_pct,
-                    "ppb_pct": rep.admet_prediction.ppb_pct,
-                    "vd_ss_l_kg": rep.admet_prediction.vd_ss_l_kg,
-                    "clearance_ml_min_kg": rep.admet_prediction.clearance_ml_min_kg,
-                    "half_life_hr": rep.admet_prediction.elimination_half_life_hr,
-                    "herg_risk": rep.admet_prediction.herg_risk,
-                    "overall_score": rep.overall_druglikeness_score,
-                })
-            with open(args.output, "w", newline="", encoding="utf-8") as f_out:
-                if out_rows:
-                    writer = csv.DictWriter(f_out, fieldnames=list(out_rows[0].keys()))
-                    writer.writeheader()
-                    writer.writerows(out_rows)
+            errors = []
+            for idx, r in enumerate(rows, start=1):
+                try:
+                    mol = MoleculeProperties(
+                        name=r.get("name", f"Molecule_{idx}"),
+                        mw=float(r.get("mw", 300.0)),
+                        logp=float(r.get("logp", 2.0)),
+                        hbd=int(float(r.get("hbd", 2))),
+                        hba=int(float(r.get("hba", 4))),
+                        tpsa=float(r.get("tpsa", 60.0)),
+                        rotatable_bonds=int(float(r.get("rotatable_bonds", 4))),
+                        aromatic_rings=int(float(r.get("aromatic_rings", 2))),
+                        heavy_atoms=int(float(r.get("heavy_atoms", 22))),
+                        molar_refractivity=float(r.get("molar_refractivity", 70.0)),
+                    )
+                    rep = ADMETPredictor.evaluate_candidate(mol)
+                    out_rows.append({
+                        "name": mol.name,
+                        "mw": mol.mw,
+                        "logp": mol.logp,
+                        "lipinski_passes": rep.lipinski.passes,
+                        "lipinski_violations": rep.lipinski.violations,
+                        "veber_passes": rep.veber.passes,
+                        "qed_score": rep.qed.qed_score,
+                        "cns_mpo_score": rep.cns_mpo.score,
+                        "hia_pct": rep.admet_prediction.hia_pct,
+                        "ppb_pct": rep.admet_prediction.ppb_pct,
+                        "vd_ss_l_kg": rep.admet_prediction.vd_ss_l_kg,
+                        "clearance_ml_min_kg": rep.admet_prediction.clearance_ml_min_kg,
+                        "half_life_hr": rep.admet_prediction.elimination_half_life_hr,
+                        "herg_risk": rep.admet_prediction.herg_risk,
+                        "overall_score": rep.overall_druglikeness_score,
+                    })
+                except (ValueError, TypeError) as row_err:
+                    errors.append(f"Row {idx} ({r.get('name', 'Unknown')}): {row_err}")
+
+            if errors:
+                print(f"Warning: {len(errors)} row(s) skipped due to errors:", file=sys.stderr)
+                for err in errors:
+                    print(f"  - {err}", file=sys.stderr)
+
+            if not out_rows:
+                print("Error: No valid molecules processed.", file=sys.stderr)
+                return 1
+
+            with open(output_path, "w", newline="", encoding="utf-8") as f_out:
+                writer = csv.DictWriter(f_out, fieldnames=list(out_rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(out_rows)
             print(f"Successfully processed {len(out_rows)} molecules to {args.output}")
             return 0
         except Exception as e:

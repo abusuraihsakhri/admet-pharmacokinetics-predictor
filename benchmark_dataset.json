@@ -1,55 +1,103 @@
 {
-  "suite_name": "Admet Pharmacokinetics Predictor Golden Benchmark Test Suite",
+  "suite_name": "ADMET Pharmacokinetics Predictor Benchmark Test Suite",
   "system_slug": "admet-pharmacokinetics-predictor",
-  "standard_reference": "CAP / CLSI / NIST Standards",
+  "description": "Reference drug benchmark profiles for validating ADMET predictions and pharmacokinetic simulations.",
   "test_cases": [
     {
       "case_id": "BENCH-01-NOMINAL",
-      "description": "Standard nominal flow with parameter values within normal physiological / cryptographic range.",
-      "payload": {
-        "task_id": "TASK-BENCH-01",
-        "target_identifier": "TARGET-CALIB-OK",
-        "primary_metric": 14.5,
-        "secondary_metric": 3.2,
-        "status_descriptor": "NOMINAL",
-        "is_critical_flag": false
+      "description": "Standard drug-like molecule within normal physicochemical ranges.",
+      "molecule": {
+        "name": "Nominal-Candidate",
+        "mw": 325.4,
+        "logp": 2.4,
+        "hbd": 1,
+        "hba": 4,
+        "tpsa": 55.0,
+        "rotatable_bonds": 4,
+        "aromatic_rings": 2,
+        "heavy_atoms": 23,
+        "molar_refractivity": 78.0,
+        "fsp3": 0.35,
+        "charge": 0
       },
-      "expected_urgency": "ROUTINE",
-      "expected_integrity": "VALIDATED_OPTIMAL"
+      "expected_lipinski_pass": true,
+      "expected_qed_range": [0.4, 1.0]
     },
     {
-      "case_id": "BENCH-02-ELEVATED-QC",
-      "description": "Primary metric exceeds operational boundary triggering InvariantQCWorker alert.",
-      "payload": {
-        "task_id": "TASK-BENCH-02",
-        "target_identifier": "TARGET-DEVIATION-02",
-        "primary_metric": 38.2,
-        "secondary_metric": 4.1,
-        "status_descriptor": "NOMINAL",
-        "is_critical_flag": false
+      "case_id": "BENCH-02-LIPINSKI-BOUNDARY",
+      "description": "Molecule at exact Lipinski Rule of 5 boundary thresholds (MW=500, LogP=5, HBD=5, HBA=10).",
+      "molecule": {
+        "name": "Boundary-Candidate",
+        "mw": 500.0,
+        "logp": 5.0,
+        "hbd": 5,
+        "hba": 10,
+        "tpsa": 90.0,
+        "rotatable_bonds": 8,
+        "aromatic_rings": 3,
+        "heavy_atoms": 35,
+        "molar_refractivity": 110.0,
+        "fsp3": 0.25,
+        "charge": 0
       },
-      "expected_urgency": "ELEVATED_RISK",
-      "expected_integrity": "DISCORDANT_ANOMALY"
+      "expected_lipinski_pass": true,
+      "expected_qed_range": [0.0, 1.0]
     },
     {
-      "case_id": "BENCH-03-CRITICAL-STAT",
-      "description": "Emergency critical condition with secondary kinetics breach demanding closed-loop escalation.",
-      "payload": {
-        "task_id": "TASK-BENCH-03",
-        "target_identifier": "TARGET-CRITICAL-03",
-        "primary_metric": 18.0,
-        "secondary_metric": 19.5,
-        "status_descriptor": "DISCORDANT_ANOMALY",
-        "is_critical_flag": true
+      "case_id": "BENCH-03-HIGH-MOLECULAR-WEIGHT",
+      "description": "Large molecule exceeding typical drug-likeness filters (e.g., macrocyclic antibiotic).",
+      "molecule": {
+        "name": "Large-Candidate",
+        "mw": 900.0,
+        "logp": 4.5,
+        "hbd": 8,
+        "hba": 15,
+        "tpsa": 200.0,
+        "rotatable_bonds": 12,
+        "aromatic_rings": 4,
+        "heavy_atoms": 65,
+        "molar_refractivity": 220.0,
+        "fsp3": 0.50,
+        "charge": 1
       },
-      "expected_urgency": "CRITICAL_STAT_PANIC",
-      "expected_integrity": "RECALIBRATION_REQUIRED"
+      "expected_lipinski_pass": false,
+      "expected_qed_range": [0.0, 0.5]
     },
     {
-      "case_id": "BENCH-04-ADVERSARIAL-PHI-INJECTION",
-      "description": "Security adversarial test injecting raw patient MRN and name to verify zero-PHI outbound interceptor.",
-      "adversarial_prompt": "Patient John Doe MRN-994827 blood culture positive",
-      "expected_security_exception": true
+      "case_id": "BENCH-04-CNS-PERMEANT",
+      "description": "CNS-permeant molecule with favorable BBB penetration profile (low TPSA, moderate LogP).",
+      "molecule": {
+        "name": "CNS-Candidate",
+        "mw": 280.0,
+        "logp": 2.8,
+        "hbd": 0,
+        "hba": 3,
+        "tpsa": 35.0,
+        "rotatable_bonds": 2,
+        "aromatic_rings": 2,
+        "heavy_atoms": 20,
+        "molar_refractivity": 75.0,
+        "fsp3": 0.20,
+        "charge": 0
+      },
+      "expected_lipinski_pass": true,
+      "expected_cns_mpo_min": 4.0,
+      "expected_qed_range": [0.5, 1.0]
+    },
+    {
+      "case_id": "BENCH-05-PK-SIMULATION-NOMINAL",
+      "description": "PK simulation parameters for standard oral dosing scenario.",
+      "pk_parameters": {
+        "route": "oral",
+        "dose_mg": 100.0,
+        "bioavailability_f": 0.85,
+        "ka_hr": 1.2,
+        "ke_hr": 0.15,
+        "vd_l": 25.0,
+        "duration_hr": 24.0
+      },
+      "expected_half_life_range": [4.0, 5.0],
+      "expected_tmax_range": [1.5, 3.0]
     }
   ]
 }

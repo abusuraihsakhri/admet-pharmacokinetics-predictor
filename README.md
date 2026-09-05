@@ -38,6 +38,11 @@ git clone https://github.com/abusuraihsakhri/admet-pharmacokinetics-predictor.gi
 cd admet-pharmacokinetics-predictor
 ```
 
+Optional: Install as a package to use the `admet-predictor` command:
+```bash
+pip install -e .
+```
+
 ---
 
 ## CLI Usage
@@ -72,6 +77,7 @@ python cli.py pk-sim --route multi --dose 250 --f 0.80 --ka 1.0 --ke 0.10 --vd 3
 ```bash
 python cli.py batch --input sample.csv --output results.csv
 ```
+The batch processor validates input paths, skips malformed rows with warnings, and reports processing errors to stderr.
 
 ---
 

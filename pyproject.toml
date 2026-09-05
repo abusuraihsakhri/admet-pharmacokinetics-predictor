@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "admet-pharmacokinetics-predictor"
 version = "2.0.0"
-description = "ADMET-Sentinel: Lipinski Rule of 5, Veber, QED & BBB Permeability Predictor"
+description = "ADMET & Pharmacokinetics Predictor: Lipinski/Veber/Egan/Ghose/Muegge filters, QED, CNS MPO, ADMET profiling, and PK simulation"
 readme = "README.md"
 authors = [{ name = "Dr. Abu Suraih Sakhri", email = "abusuraih@example.com" }]
 license = { text = "MIT" }
@@ -13,14 +13,14 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Topic :: Security/Cryptography",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
-admet-pharmacokinetics-predictor = "admet_predictor.cli:main"
+admet-predictor = "cli:main"
 
 [project.urls]
 Homepage = "https://github.com/abusuraihsakhri/admet-pharmacokinetics-predictor"

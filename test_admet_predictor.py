@@ -270,6 +270,10 @@ class TestCLIAndBatch(unittest.TestCase):
         res = cli.main(["evaluate", "--mw", "320", "--logp", "2.1", "--hbd", "1", "--hba", "4", "--name", "Candidate-101"])
         self.assertEqual(res, 0)
 
+    def test_cli_evaluate_with_fsp3_and_charge(self):
+        res = cli.main(["evaluate", "--mw", "320", "--logp", "2.1", "--fsp3", "0.45", "--charge", "1", "--name", "Charged-Candidate"])
+        self.assertEqual(res, 0)
+
     def test_cli_pk_simulation(self):
         res = cli.main(["pk-sim", "--route", "oral", "--dose", "150", "--f", "0.85"])
         self.assertEqual(res, 0)
@@ -290,6 +294,76 @@ class TestCLIAndBatch(unittest.TestCase):
             with open(out_csv, "r") as f_out:
                 lines = f_out.readlines()
                 self.assertEqual(len(lines), 3)
+
+    def test_batch_csv_with_malformed_rows(self):
+        """Batch processing should skip malformed rows and continue processing valid ones."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            in_csv = os.path.join(tmpdir, "input.csv")
+            out_csv = os.path.join(tmpdir, "output.csv")
+            with open(in_csv, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["name", "mw", "logp", "hbd", "hba", "tpsa", "rotatable_bonds", "aromatic_rings", "heavy_atoms", "molar_refractivity"])
+                writer.writerow(["GoodDrug", 250.0, 1.8, 1, 3, 50.0, 3, 1, 18, 65.0])
+                writer.writerow(["BadDrug", "invalid", 5.5, 6, 12, 160.0, 12, 4, 45, 160.0])
+                writer.writerow(["AnotherGood", 300.0, 2.0, 2, 4, 60.0, 4, 2, 22, 70.0])
+
+            ret = cli.main(["batch", "--input", in_csv, "--output", out_csv])
+            self.assertEqual(ret, 0)
+            self.assertTrue(os.path.exists(out_csv))
+            with open(out_csv, "r") as f_out:
+                lines = f_out.readlines()
+                # Header + 2 valid rows (BadDrug skipped)
+                self.assertEqual(len(lines), 3)
+
+    def test_batch_csv_missing_input_file(self):
+        """Batch processing should return error code for missing input file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            in_csv = os.path.join(tmpdir, "nonexistent.csv")
+            out_csv = os.path.join(tmpdir, "output.csv")
+            ret = cli.main(["batch", "--input", in_csv, "--output", out_csv])
+            self.assertEqual(ret, 1)
+
+    def test_batch_csv_empty_input(self):
+        """Batch processing should return error for empty CSV (headers only)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            in_csv = os.path.join(tmpdir, "input.csv")
+            out_csv = os.path.join(tmpdir, "output.csv")
+            with open(in_csv, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["name", "mw", "logp", "hbd", "hba", "tpsa", "rotatable_bonds", "aromatic_rings", "heavy_atoms", "molar_refractivity"])
+
+            ret = cli.main(["batch", "--input", in_csv, "--output", out_csv])
+            self.assertEqual(ret, 1)
+
+
+class TestPKEdgeCases(unittest.TestCase):
+    """Test edge cases in pharmacokinetic simulations."""
+
+    def test_oral_multiple_equal_ka_ke(self):
+        """simulate_oral_multiple should handle ka == ke without division by zero."""
+        sim = PharmacokineticSimulator.simulate_oral_multiple(
+            dose_mg=100.0,
+            bioavailability_f=0.85,
+            ka_hr=0.15,
+            ke_hr=0.15,
+            vd_l=25.0,
+            dosing_interval_tau_hr=12.0,
+            num_doses=3,
+        )
+        self.assertIsNotNone(sim)
+        self.assertGreater(sim.cmax_mg_l, 0)
+
+    def test_oral_multiple_invalid_parameters(self):
+        """simulate_oral_multiple should raise ValueError for non-positive parameters."""
+        with self.assertRaises(ValueError):
+            PharmacokineticSimulator.simulate_oral_multiple(
+                dose_mg=-10, bioavailability_f=0.8, ka_hr=1, ke_hr=0.1, vd_l=10
+            )
+        with self.assertRaises(ValueError):
+            PharmacokineticSimulator.simulate_oral_multiple(
+                dose_mg=100, bioavailability_f=0.8, ka_hr=1, ke_hr=0.1, vd_l=10,
+                dosing_interval_tau_hr=-5
+            )
 
 
 if __name__ == "__main__":

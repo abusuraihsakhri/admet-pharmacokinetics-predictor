@@ -773,6 +773,12 @@ class PharmacokineticSimulator:
     ) -> PKSimulationResult:
         if dosing_interval_tau_hr <= 0 or num_doses <= 0:
             raise ValueError("Tau and num_doses must be positive.")
+        if dose_mg <= 0 or bioavailability_f <= 0 or ka_hr <= 0 or ke_hr <= 0 or vd_l <= 0:
+            raise ValueError("All PK parameters (dose, F, ka, ke, Vd) must be strictly positive.")
+
+        # Handle near-equal ka and ke to avoid division by zero in Bateman function
+        if abs(ka_hr - ke_hr) < 1e-6:
+            ka_hr += 1e-4
 
         cl_l_hr = ke_hr * vd_l
         t_half = math.log(2.0) / ke_hr
