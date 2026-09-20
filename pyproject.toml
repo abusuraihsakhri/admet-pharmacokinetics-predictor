@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "admet-pharmacokinetics-predictor"
-version = "2.0.0"
-description = "ADMET & Pharmacokinetics Predictor: Lipinski/Veber/Egan/Ghose/Muegge filters, QED, CNS MPO, ADMET profiling, and PK simulation"
+version = "2.1.0"
+description = "Descriptor-based drug-likeness screening, heuristic ADMET estimates, CNS MPO scoring, and pharmacokinetic simulation"
 readme = "README.md"
-authors = [{ name = "Dr. Abu Suraih Sakhri", email = "abusuraih@example.com" }]
+authors = [{ name = "Dr. Abu Suraih Sakhri" }]
 license = { text = "MIT" }
 classifiers = [
     "Programming Language :: Python :: 3",
