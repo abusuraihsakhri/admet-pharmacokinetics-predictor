@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Browser interface for descriptor-based drug-likeness screening, heuristic ADMET estimates, CNS MPO scoring, and pharmacokinetic simulation.">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <title>ADMET & PK Screening</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">AP</span>
+        <div>
+          <h1>ADMET & PK Screening</h1>
+          <p>Descriptor screening and one-compartment pharmacokinetics</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span id="runtime-status" class="status" role="status" aria-live="polite">Loading Python…</span>
+        <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch color theme" title="Switch color theme">◐</button>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Calculator mode" role="tablist">
+      <button class="tab active" id="screen-tab" type="button" role="tab" aria-selected="true" aria-controls="screen-panel" data-tab="screen-panel">Molecule screen</button>
+      <button class="tab" id="pk-tab" type="button" role="tab" aria-selected="false" aria-controls="pk-panel" data-tab="pk-panel">PK simulation</button>
+      <a class="repo-link" href="https://github.com/abusuraihsakhri/admet-pharmacokinetics-predictor" rel="noopener noreferrer">Repository ↗</a>
+    </nav>
+
+    <main class="workspace">
+      <section id="screen-panel" class="mode-panel active" role="tabpanel" aria-labelledby="screen-tab">
+        <form id="screen-form" class="input-card">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">Descriptor input</span>
+              <h2>Molecule screen</h2>
+            </div>
+            <button type="button" class="text-button" id="load-example">Load aspirin</button>
+          </div>
+          <div class="form-scroll">
+            <div class="field-grid">
+              <label class="field span-2">Name
+                <input name="name" value="Candidate" autocomplete="off">
+              </label>
+              <label class="field">MW <span>Da</span>
+                <input name="mw" type="number" step="0.01" min="0.01" value="320.5" required>
+              </label>
+              <label class="field">LogP
+                <input name="logp" type="number" step="0.01" value="2.8" required>
+              </label>
+              <label class="field">HBD
+                <input name="hbd" type="number" step="1" min="0" value="2" required>
+              </label>
+              <label class="field">HBA
+                <input name="hba" type="number" step="1" min="0" value="4" required>
+              </label>
+              <label class="field">TPSA <span>Å²</span>
+                <input name="tpsa" type="number" step="0.1" min="0" value="60" required>
+              </label>
+              <label class="field">Rotatable bonds
+                <input name="rotatable_bonds" type="number" step="1" min="0" value="4" required>
+              </label>
+              <label class="field">Aromatic rings
+                <input name="aromatic_rings" type="number" step="1" min="0" value="2" required>
+              </label>
+              <label class="field">Heavy atoms
+                <input name="heavy_atoms" type="number" step="1" min="0" value="22" required>
+              </label>
+              <label class="field">Molar refractivity
+                <input name="molar_refractivity" type="number" step="0.1" min="0" value="75" required>
+              </label>
+              <label class="field">Fsp³ <span>0–1</span>
+                <input name="fsp3" type="number" step="0.01" min="0" max="1" value="0.35" required>
+              </label>
+              <label class="field">Basic pKa <span>optional</span>
+                <input name="pka_base" type="number" step="0.1">
+              </label>
+              <label class="field">Acidic pKa <span>optional</span>
+                <input name="pka_acid" type="number" step="0.1">
+              </label>
+            </div>
+            <p class="inline-note">The ADMET fields are transparent descriptor heuristics, not trained or externally validated prediction models. The QED-like value is not canonical Bickerton QED because molecular structure and structural alerts are not available.</p>
+          </div>
+          <div class="form-actions">
+            <button class="primary-button" type="submit" disabled>Analyze molecule</button>
+          </div>
+        </form>
+
+        <section class="result-card" aria-live="polite" aria-busy="false">
+          <div id="screen-empty" class="empty-state">
+            <div class="empty-icon" aria-hidden="true">⌁</div>
+            <h2>Ready for screening</h2>
+            <p>Enter descriptors and run the Python engine. Results remain in this browser session.</p>
+          </div>
+          <div id="screen-results" class="results hidden"></div>
+        </section>
+      </section>
+
+      <section id="pk-panel" class="mode-panel" role="tabpanel" aria-labelledby="pk-tab" hidden>
+        <form id="pk-form" class="input-card">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">Analytical model</span>
+              <h2>PK simulation</h2>
+            </div>
+          </div>
+          <div class="form-scroll">
+            <div class="segmented" role="radiogroup" aria-label="Dosing route">
+              <label><input type="radio" name="route" value="oral" checked><span>Oral single</span></label>
+              <label><input type="radio" name="route" value="iv"><span>IV bolus</span></label>
+              <label><input type="radio" name="route" value="multi"><span>Oral multiple</span></label>
+            </div>
+            <div class="field-grid pk-fields">
+              <label class="field">Dose <span>mg</span>
+                <input name="dose_mg" type="number" step="0.1" min="0.01" value="100" required>
+              </label>
+              <label class="field conditional oral-field">Bioavailability F <span>0–1</span>
+                <input name="bioavailability_f" type="number" step="0.01" min="0.01" max="1" value="0.85">
+              </label>
+              <label class="field conditional oral-field">Absorption ka <span>h⁻¹</span>
+                <input name="ka_hr" type="number" step="0.01" min="0.001" value="1.2">
+              </label>
+              <label class="field">Elimination ke <span>h⁻¹</span>
+                <input name="ke_hr" type="number" step="0.01" min="0.001" value="0.15" required>
+              </label>
+              <label class="field">Distribution volume <span>L</span>
+                <input name="vd_l" type="number" step="0.1" min="0.01" value="25" required>
+              </label>
+              <label class="field conditional single-field">Duration <span>h</span>
+                <input name="duration_hr" type="number" step="0.5" min="0.1" value="24">
+              </label>
+              <label class="field conditional multi-field hidden">Dosing interval τ <span>h</span>
+                <input name="tau" type="number" step="0.5" min="0.1" value="12">
+              </label>
+              <label class="field conditional multi-field hidden">Simulated doses
+                <input name="num_doses" type="number" step="1" min="1" value="7">
+              </label>
+            </div>
+            <p class="inline-note">One-compartment analytical model. Parameters such as F, ka, ke and Vd must come from appropriate data; this simulator does not infer them from the molecule screen.</p>
+          </div>
+          <div class="form-actions">
+            <button class="primary-button" type="submit" disabled>Run simulation</button>
+          </div>
+        </form>
+
+        <section class="result-card" aria-live="polite" aria-busy="false">
+          <div id="pk-empty" class="empty-state">
+            <div class="empty-icon" aria-hidden="true">∿</div>
+            <h2>No simulation yet</h2>
+            <p>Choose a route and enter pharmacokinetic parameters.</p>
+          </div>
+          <div id="pk-results" class="results hidden"></div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Runs locally in your browser with Pyodide. No form data is sent to this repository.</span>
+      <span>Exploratory use only — not for clinical or regulatory decision-making.</span>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.29.5/full/pyodide.js"></script>
+  <script src="./assets/app.js" defer></script>
+</body>
+</html>
