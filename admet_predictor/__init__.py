@@ -18,7 +18,7 @@ import csv
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Tuple, Any, Union
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 # ============================================================================
 # Data Models
@@ -53,7 +53,7 @@ class MoleculeProperties:
         if self.heavy_atoms < 0:
             raise ValueError("Heavy atom count cannot be negative")
         if not (0.0 <= self.fsp3 <= 1.0):
-            self.fsp3 = max(0.0, min(1.0, self.fsp3))
+            raise ValueError(f"Fsp3 must be between 0 and 1, got {self.fsp3}")
         # Default LogD7.4 approximation if not provided
         if self.logd74 is None:
             if self.pka_base is not None and self.pka_base > 7.4:
@@ -79,7 +79,7 @@ class FilterResult:
 
 @dataclass
 class QEDResult:
-    """Quantitative Estimate of Drug-likeness (Bickerton et al. 2012)."""
+    """Simplified QED-like descriptor score; not the published Bickerton QED implementation."""
     qed_score: float  # Scale 0.0 to 1.0
     druglikeness_grade: str # High (>0.67), Moderate (0.49-0.67), Low (<0.49)
     individual_desirabilities: Dict[str, float]
@@ -352,10 +352,12 @@ class LeadLikenessFilter:
 
 class QEDCalculator:
     """
-    Quantitative Estimate of Drug-likeness (Bickerton et al., Nature Chemistry 2012).
-    Calculates asymmetric double sigmoidal desirability functions for 8 molecular descriptors:
-    d_i(x) = a + b / (1 + exp(-(x - c + d/2)/e)) * (1 - 1 / (1 + exp(-(x - c - d/2)/f)))
-    QED = exp( (sum_i w_i * ln d_i) / (sum_i w_i) )
+    Simplified QED-like descriptor score.
+
+    This class preserves the historical public API but does not implement the published
+    Bickerton QED exactly: the repository accepts descriptor-level inputs rather than a
+    molecular structure, so structural alerts and aromatic atom proportion are unavailable.
+    Treat the result as a transparent screening heuristic, not canonical QED.
     """
     ADS_PARAMS = {
         "mw": (0.47, 0.53, 345.96, 218.42, 47.93, 76.54, 0.99),
@@ -415,11 +417,11 @@ class QEDCalculator:
         qed_score = round(max(0.0, min(1.0, qed)), 3)
 
         if qed_score >= 0.67:
-            grade = "High Drug-Likeness"
+            grade = "High QED-like Score"
         elif qed_score >= 0.49:
-            grade = "Moderate Drug-Likeness"
+            grade = "Moderate QED-like Score"
         else:
-            grade = "Low Drug-Likeness"
+            grade = "Low QED-like Score"
 
         return QEDResult(
             qed_score=qed_score,
@@ -435,8 +437,8 @@ class QEDCalculator:
 
 class CNSMPOPredictor:
     """
-    Pfizer CNS Multiparameter Optimization (CNS MPO) scoring algorithm (Wager et al. 2010, 2016).
-    Evaluates 6 properties with continuous monotonic/triangular ramps in [0, 1].
+    Descriptor-based CNS MPO scoring following the six-property Wager et al. framework.
+    Each property contributes a desirability score from 0 to 1.
     """
     @classmethod
     def _ramp(cls, x: float, low: float, high: float, increasing: bool = False) -> float:
@@ -451,14 +453,9 @@ class CNSMPOPredictor:
 
     @classmethod
     def _tpsa_score(cls, tpsa: float) -> float:
-        if 40.0 <= tpsa <= 90.0:
-            return 1.0
-        elif tpsa < 40.0:
-            if tpsa <= 20.0: return 0.0
-            return (tpsa - 20.0) / 20.0
-        else:
-            if tpsa >= 120.0: return 0.0
-            return (120.0 - tpsa) / 30.0
+        # CNS MPO favors lower polar surface area: full desirability at <=40 Å²,
+        # decreasing linearly to zero at >=90 Å².
+        return cls._ramp(tpsa, 40.0, 90.0, increasing=False)
 
     @classmethod
     def calculate(cls, mol: MoleculeProperties) -> CNSMPOResult:
@@ -516,7 +513,11 @@ class CNSMPOPredictor:
 # ============================================================================
 
 class ADMETPredictor:
-    """Predicts in vitro and in vivo ADMET parameters based on molecular descriptors."""
+    """Produces descriptor-based heuristic ADMET screening estimates.
+
+    These equations are transparent heuristics, not trained or externally validated
+    predictive models. They are suitable for exploratory screening only.
+    """
 
     @classmethod
     def predict_properties(cls, mol: MoleculeProperties) -> ADMETPropertyEstimate:
@@ -632,17 +633,17 @@ class ADMETPredictor:
         if not veber.passes:
             recommendations.append("Reduce rotatable bonds or polar surface area (TPSA) to improve permeability.")
         if admet.herg_risk == "High":
-            recommendations.append("High hERG liability detected: consider decreasing basicity (pKa) or lipophilicity (LogP).")
+            recommendations.append("High heuristic hERG flag: consider reviewing basicity (pKa), lipophilicity (LogP), and dedicated liability assays/models.")
         if admet.dili_risk == "High":
-            recommendations.append("Elevated DILI hepatotoxicity alert: evaluate structural alerts and reactive metabolites.")
+            recommendations.append("High heuristic DILI flag: review structural alerts, reactive-metabolite risk, and dedicated hepatotoxicity evidence.")
         if admet.cyp_inhibitions.get("CYP3A4") == "High":
-            recommendations.append("Strong CYP3A4 inhibition predicted: investigate potential clinical drug-drug interactions (DDI).")
+            recommendations.append("High heuristic CYP3A4 inhibition flag: investigate with a validated prediction method or experimental DDI data.")
         if overall_score >= 80.0:
-            assessment = "Excellent drug-like candidate with favorable physicochemical and ADMET profile."
+            assessment = "High rule-based drug-likeness screening score; review heuristic ADMET flags separately."
         elif overall_score >= 60.0:
-            assessment = "Acceptable drug candidate; target specific ADMET/physicochemical optimization."
+            assessment = "Intermediate rule-based drug-likeness screening score; review individual criteria and heuristic ADMET flags."
         else:
-            assessment = "Sub-optimal drug candidate with significant developability or ADMET liabilities."
+            assessment = "Low rule-based drug-likeness screening score; inspect failed criteria before further interpretation."
 
         return ComprehensiveADMETReport(
             molecule=mol,
@@ -679,8 +680,10 @@ class PharmacokineticSimulator:
         duration_hr: float = 24.0,
         num_points: int = 100,
     ) -> PKSimulationResult:
-        if dose_mg <= 0 or bioavailability_f <= 0 or ka_hr <= 0 or ke_hr <= 0 or vd_l <= 0:
-            raise ValueError("All PK parameters (dose, F, ka, ke, Vd) must be strictly positive.")
+        if dose_mg <= 0 or not (0.0 < bioavailability_f <= 1.0) or ka_hr <= 0 or ke_hr <= 0 or vd_l <= 0:
+            raise ValueError("Dose, ka, ke, and Vd must be positive and bioavailability F must be in (0, 1].")
+        if duration_hr <= 0 or num_points < 2:
+            raise ValueError("Simulation duration must be positive and num_points must be at least 2.")
 
         if abs(ka_hr - ke_hr) < 1e-6:
             ka_hr += 1e-4
@@ -731,6 +734,8 @@ class PharmacokineticSimulator:
     ) -> PKSimulationResult:
         if dose_mg <= 0 or ke_hr <= 0 or vd_l <= 0:
             raise ValueError("Dose, ke, and Vd must be positive for IV bolus simulation.")
+        if duration_hr <= 0 or num_points < 2:
+            raise ValueError("Simulation duration must be positive and num_points must be at least 2.")
 
         cl_l_hr = ke_hr * vd_l
         t_half = math.log(2.0) / ke_hr
@@ -771,10 +776,10 @@ class PharmacokineticSimulator:
         num_doses: int = 7,
         num_points_per_interval: int = 25,
     ) -> PKSimulationResult:
-        if dosing_interval_tau_hr <= 0 or num_doses <= 0:
-            raise ValueError("Tau and num_doses must be positive.")
-        if dose_mg <= 0 or bioavailability_f <= 0 or ka_hr <= 0 or ke_hr <= 0 or vd_l <= 0:
-            raise ValueError("All PK parameters (dose, F, ka, ke, Vd) must be strictly positive.")
+        if dosing_interval_tau_hr <= 0 or num_doses <= 0 or num_points_per_interval < 2:
+            raise ValueError("Tau and num_doses must be positive and num_points_per_interval must be at least 2.")
+        if dose_mg <= 0 or not (0.0 < bioavailability_f <= 1.0) or ka_hr <= 0 or ke_hr <= 0 or vd_l <= 0:
+            raise ValueError("Dose, ka, ke, and Vd must be positive and bioavailability F must be in (0, 1].")
 
         # Handle near-equal ka and ke to avoid division by zero in Bateman function
         if abs(ka_hr - ke_hr) < 1e-6:
@@ -782,8 +787,28 @@ class PharmacokineticSimulator:
 
         cl_l_hr = ke_hr * vd_l
         t_half = math.log(2.0) / ke_hr
-        r_acc = 1.0 / (1.0 - math.exp(-ke_hr * dosing_interval_tau_hr))
-        c_ss_avg = (dose_mg * bioavailability_f) / (cl_l_hr * dosing_interval_tau_hr)
+        tau = dosing_interval_tau_hr
+        prefactor = dose_mg * bioavailability_f * ka_hr / (vd_l * (ka_hr - ke_hr))
+
+        def steady_state_conc(t: float) -> float:
+            elimination_term = math.exp(-ke_hr * t) / (1.0 - math.exp(-ke_hr * tau))
+            absorption_term = math.exp(-ka_hr * t) / (1.0 - math.exp(-ka_hr * tau))
+            return max(0.0, prefactor * (elimination_term - absorption_term))
+
+        t_ss_max = math.log(
+            (ka_hr * (1.0 - math.exp(-ke_hr * tau))) /
+            (ke_hr * (1.0 - math.exp(-ka_hr * tau)))
+        ) / (ka_hr - ke_hr)
+        t_ss_max = max(0.0, min(tau, t_ss_max))
+        c_ss_max = steady_state_conc(t_ss_max)
+        c_ss_min = steady_state_conc(tau)
+        c_ss_avg = (dose_mg * bioavailability_f) / (cl_l_hr * tau)
+
+        single_tmax = max(0.0, math.log(ka_hr / ke_hr) / (ka_hr - ke_hr))
+        single_cmax = prefactor * (
+            math.exp(-ke_hr * single_tmax) - math.exp(-ka_hr * single_tmax)
+        )
+        peak_accumulation = c_ss_max / single_cmax if single_cmax > 0 else 1.0
 
         total_time = num_doses * dosing_interval_tau_hr
         dt = dosing_interval_tau_hr / num_points_per_interval
@@ -806,9 +831,6 @@ class PharmacokineticSimulator:
             if c_tot > max_seen:
                 max_seen = c_tot
 
-        last_interval_pts = [pt.plasma_conc_mg_l for pt in curve if pt.time_hr >= (num_doses - 1) * dosing_interval_tau_hr]
-        c_ss_max = max(last_interval_pts) if last_interval_pts else max_seen
-        c_ss_min = min(last_interval_pts) if last_interval_pts else 0.0
         auc_tau = c_ss_avg * dosing_interval_tau_hr
 
         return PKSimulationResult(
@@ -821,13 +843,13 @@ class PharmacokineticSimulator:
             volume_distribution_l=round(vd_l, 2),
             clearance_l_hr=round(cl_l_hr, 2),
             cmax_mg_l=round(max_seen, 4),
-            tmax_hr=round(math.log(ka_hr / ke_hr) / (ka_hr - ke_hr), 2),
+            tmax_hr=round(t_ss_max, 2),
             auc_0_inf_mg_hr_l=round((dose_mg * bioavailability_f) / cl_l_hr, 2),
             auc_tau_mg_hr_l=round(auc_tau, 2),
             c_ss_avg_mg_l=round(c_ss_avg, 4),
             c_ss_min_mg_l=round(c_ss_min, 4),
             c_ss_max_mg_l=round(c_ss_max, 4),
-            accumulation_ratio=round(r_acc, 2),
+            accumulation_ratio=round(peak_accumulation, 2),
             concentration_curve=curve,
         )
 
