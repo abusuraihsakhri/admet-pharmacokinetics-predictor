@@ -1,93 +1,110 @@
-# ADMET & Pharmacokinetics Predictor Engine
+# ADMET & Pharmacokinetics Predictor
 
-A Python computational chemistry, medicinal chemistry, and pharmacokinetics evaluation engine. Evaluates small molecule drug-likeness rules (Lipinski Rule of 5, Veber, Egan, Ghose, Muegge, Lead-likeness), quantitative drug-likeness (QED), Central Nervous System Multiparameter Optimization (CNS MPO), absorption/distribution/metabolism/excretion/toxicity (ADMET) risks, and one-compartment pharmacokinetic concentration-time simulations.
+### [Open the Live Application →](https://abusuraihsakhri.github.io/admet-pharmacokinetics-predictor/)
 
-Requires Python standard library only (zero external runtime dependencies).
+A Python tool for descriptor-based drug-likeness screening, heuristic ADMET estimates, CNS multiparameter optimization (CNS MPO) scoring, and one-compartment pharmacokinetic simulation.
 
----
+The Python engine uses only the standard library. The browser application runs the same engine client-side with Pyodide.
 
-## Features
+## What it provides
 
-- **Drug-Likeness Rules & Filtering:**
-  - **Lipinski Rule of 5:** MW $\le$ 500 Da, LogP $\le$ 5.0, HBD $\le$ 5, HBA $\le$ 10.
-  - **Veber Filter:** Rotatable bonds $\le$ 10, TPSA $\le$ 140 $\text{\AA}^2$.
-  - **Egan, Ghose, Muegge (Bayer), & Lead-Likeness Filters.**
-- **Quantitative Estimation of Drug-Likeness (QED):** Bickerton et al. asymmetric desirability function across 8 physicochemical descriptors.
-- **CNS Multiparameter Optimization (CNS MPO):** Wager et al. 6-parameter scoring function (0-6.0 scale) and predicted LogBB brain penetration likelihood.
-- **In-Silico ADMET Property Profiling:**
-  - **Absorption:** Human Intestinal Absorption (HIA %), Caco-2 permeability, P-gp substrate/inhibition risk.
-  - **Distribution:** Plasma protein binding (PPB %), volume of distribution ($V_{d,\text{ss}}$).
-  - **Metabolism:** CYP450 inhibition risk profiling (CYP1A2, CYP2C9, CYP2C19, CYP2D6, CYP3A4).
-  - **Excretion & Toxicity:** Intrinsic clearance, elimination half-life, hERG cardiotoxicity, DILI hepatotoxicity, Ames mutagenicity.
-- **Pharmacokinetic (PK) Simulator:**
-  - Single-dose oral absorption model (Bateman function).
-  - IV bolus elimination model.
-  - Multi-dose steady-state oral kinetics ($C_{\text{max}}$, $C_{\text{min}}$, $C_{\text{ss,avg}}$, accumulation ratio $R$).
-- **Reference Drug Library:** Built-in benchmarking profiles for Aspirin, Caffeine, Ibuprofen, Atorvastatin, Imatinib, Morphine, Vancomycin, Metformin, and Diazepam.
-- **Batch CSV Processing:** High-throughput candidate library evaluation.
+- Rule-based filters: Lipinski, Veber, Egan, Ghose, Muegge, and lead-likeness.
+- A simplified **QED-like** descriptor score.
+- Six-parameter CNS MPO scoring using LogP, LogD7.4, molecular weight, TPSA, H-bond donors, and basic pKa.
+- Descriptor-based heuristic estimates for HIA, Caco-2 permeability, P-gp, PPB, distribution volume, CYP inhibition flags, clearance, half-life, hERG, DILI, and Ames risk.
+- One-compartment PK models for oral single dose, IV bolus, and repeated oral dosing.
+- Analytical steady-state oral Cmax, Cmin, Cavg, Tmax, AUC per interval, and peak accumulation ratio.
+- Batch CSV processing and reference-drug examples.
+- Responsive browser UI with light/dark themes.
 
----
+## Browser application
 
-## Installation & Requirements
+Open the live application above. The first load downloads the pinned Pyodide runtime from jsDelivr; calculations then execute in the browser using the repository's Python source.
 
-- Python 3.10+ (tested on 3.10, 3.11, 3.12)
-- Zero external runtime dependencies. `pytest` is optional for running tests.
+The application has two workspaces:
+
+1. **Molecule screen** — enter physicochemical descriptors and review rule-based filters, CNS MPO, the QED-like score, and heuristic ADMET flags.
+2. **PK simulation** — simulate oral single-dose, IV bolus, or repeated oral dosing and inspect concentration-time output.
+
+### Privacy
+
+Form values are processed locally in the browser. The application does not submit molecule or PK inputs to this repository or to an application backend. Loading the page and Pyodide still makes normal network requests to GitHub Pages and the jsDelivr CDN.
+
+## Important limitations
+
+This repository is an exploratory screening and educational tool, not a validated ADMET prediction platform.
+
+- The ADMET equations are transparent descriptor heuristics. They are not trained or externally validated predictive models.
+- The reported **QED-like score is not canonical Bickerton QED**. Exact QED requires molecular-structure-derived inputs, including structural alerts and aromatic atom proportion, which this descriptor-only interface does not have.
+- CNS MPO is a property-alignment score, not a direct measurement of blood-brain barrier permeability or clinical CNS exposure.
+- If LogD7.4 is not supplied, the engine estimates it from LogP and one acidic or basic pKa; ampholytes and complex ionization behavior are not modeled rigorously.
+- PK simulations use standard one-compartment analytical assumptions. Parameters such as F, ka, ke, and Vd must be supplied from appropriate evidence.
+- Outputs should not be used for clinical, regulatory, dosing, or patient-care decisions.
+
+## Command-line use
+
+Requires Python 3.10 or newer.
 
 ```bash
 git clone https://github.com/abusuraihsakhri/admet-pharmacokinetics-predictor.git
 cd admet-pharmacokinetics-predictor
+python -m pip install -e .
 ```
 
-Optional: Install as a package to use the `admet-predictor` command:
+Evaluate a molecule:
+
 ```bash
-pip install -e .
+admet-predictor evaluate \
+  --name Candidate-01 \
+  --mw 320.5 \
+  --logp 2.8 \
+  --hbd 2 \
+  --hba 4 \
+  --tpsa 60
 ```
 
----
+JSON output:
 
-## CLI Usage
-
-### 1. Evaluate Single Molecule
 ```bash
-python cli.py evaluate --name Candidate-01 --mw 320.5 --logp 2.8 --hbd 2 --hba 4 --tpsa 60.0
-```
-Output as JSON:
-```bash
-python cli.py evaluate --name Candidate-01 --mw 320.5 --logp 2.8 --json
+admet-predictor evaluate --mw 320.5 --logp 2.8 --json
 ```
 
-### 2. Reference Drug Benchmark
+Reference-drug example:
+
 ```bash
-python cli.py ref Aspirin
-python cli.py ref Imatinib --json
-python cli.py --demo
+admet-predictor ref Aspirin
 ```
 
-### 3. Pharmacokinetic Simulation
-Simulate oral single dose:
+Repeated oral dosing:
+
 ```bash
-python cli.py pk-sim --route oral --dose 100 --f 0.85 --ka 1.2 --ke 0.15 --vd 25
-```
-Simulate multi-dose regimen:
-```bash
-python cli.py pk-sim --route multi --dose 250 --f 0.80 --ka 1.0 --ke 0.10 --vd 30 --tau 12 --doses 7 --json
+admet-predictor pk-sim \
+  --route multi \
+  --dose 250 \
+  --f 0.8 \
+  --ka 1.0 \
+  --ke 0.1 \
+  --vd 30 \
+  --tau 12 \
+  --doses 7
 ```
 
-### 4. Batch CSV Evaluation
+Batch CSV processing:
+
 ```bash
-python cli.py batch --input sample.csv --output results.csv
+admet-predictor batch --input sample.csv --output results.csv
 ```
-The batch processor validates input paths, skips malformed rows with warnings, and reports processing errors to stderr.
 
----
-
-## Python API Quickstart
+## Python API
 
 ```python
-from admet_predictor import MoleculeProperties, ADMETPredictor, PharmacokineticSimulator
+from admet_predictor import (
+    ADMETPredictor,
+    MoleculeProperties,
+    PharmacokineticSimulator,
+)
 
-# 1. Evaluate small molecule properties
-mol = MoleculeProperties(
+molecule = MoleculeProperties(
     name="Candidate-A",
     mw=325.4,
     logp=2.4,
@@ -100,32 +117,61 @@ mol = MoleculeProperties(
     molar_refractivity=78.0,
 )
 
-report = ADMETPredictor.evaluate_candidate(mol)
-print(f"Lipinski Pass: {report.lipinski.passes} (Violations: {report.lipinski.violations})")
-print(f"QED Score: {report.qed.qed_score:.3f} [{report.qed.druglikeness_grade}]")
-print(f"CNS MPO Score: {report.cns_mpo.score:.2f} [{report.cns_mpo.cns_permeability_likelihood}]")
-print(f"Overall Score: {report.overall_druglikeness_score:.1f} / 100")
+report = ADMETPredictor.evaluate_candidate(molecule)
+print(report.overall_druglikeness_score)
+print(report.cns_mpo.score)
 
-# 2. Simulate single-dose oral PK profile
-sim = PharmacokineticSimulator.simulate_oral_single(
-    dose_mg=100.0,
+simulation = PharmacokineticSimulator.simulate_oral_single(
+    dose_mg=100,
     bioavailability_f=0.85,
     ka_hr=1.2,
     ke_hr=0.15,
-    vd_l=25.0,
+    vd_l=25,
 )
-print(f"Cmax: {sim.cmax_mg_l:.3f} mg/L at Tmax: {sim.tmax_hr:.2f} hr | t1/2: {sim.half_life_hr:.2f} hr")
+print(simulation.cmax_mg_l, simulation.tmax_hr)
 ```
 
----
+## Local development
 
-## Running Tests
-
-Run the test suite using standard `unittest` or `pytest`:
+Install the package and test dependency:
 
 ```bash
-python test_admet_predictor.py
-# or
-pytest -v
+python -m pip install -e . pytest
 ```
 
+Run the test suite:
+
+```bash
+pytest -q
+```
+
+Run the browser application locally from the repository root:
+
+```bash
+python -m http.server 8000
+```
+
+Then open `http://localhost:8000/`. A local HTTP server is required because the browser app fetches the Python engine source.
+
+## Technology
+
+- Python 3.10+
+- Standard-library Python runtime
+- Pyodide 0.29.5 for in-browser Python execution
+- HTML, CSS, and vanilla JavaScript
+- GitHub Actions for CI and GitHub Pages deployment
+
+GitHub Actions test Python 3.10, 3.11, 3.12, and 3.13. The web application targets current versions of Chrome, Edge, Firefox, and Safari with WebAssembly support.
+
+## Method references
+
+- Lipinski CA et al. *Adv Drug Deliv Rev.* 2001;46:3–26. doi: [10.1016/S0169-409X(00)00129-0](https://doi.org/10.1016/S0169-409X(00)00129-0)
+- Veber DF et al. *J Med Chem.* 2002;45:2615–2623. doi: [10.1021/jm020017n](https://doi.org/10.1021/jm020017n)
+- Wager TT et al. *ACS Chem Neurosci.* 2010;1:435–449. doi: [10.1021/cn100008c](https://doi.org/10.1021/cn100008c)
+- Bickerton GR et al. *Nat Chem.* 2012;4:90–98. doi: [10.1038/nchem.1243](https://doi.org/10.1038/nchem.1243)
+
+The references describe the underlying published concepts. They should not be interpreted as validation of this repository's heuristic ADMET equations or simplified QED-like implementation.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
