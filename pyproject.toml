@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,10 +8,9 @@ version = "2.1.0"
 description = "Descriptor-based drug-likeness screening, heuristic ADMET estimates, CNS MPO scoring, and pharmacokinetic simulation"
 readme = "README.md"
 authors = [{ name = "Dr. Abu Suraih Sakhri" }]
-license = { text = "MIT" }
+license = "MIT"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
@@ -25,3 +24,8 @@ admet-predictor = "cli:main"
 [project.urls]
 Homepage = "https://github.com/abusuraihsakhri/admet-pharmacokinetics-predictor"
 Repository = "https://github.com/abusuraihsakhri/admet-pharmacokinetics-predictor.git"
+
+
+[tool.setuptools]
+packages = ["admet_predictor"]
+py-modules = ["cli", "pharmacokinetics"]
