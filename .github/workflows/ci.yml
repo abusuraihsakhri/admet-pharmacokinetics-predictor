@@ -2,36 +2,45 @@ name: CI
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
-    branches: [ master, main ]
+    branches: [master, main]
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
-    - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
 
-    - name: Install test dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest
+      - name: Install package and test dependency
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+          python -m pip check
 
-    - name: Run Test Suite
-      run: |
-        pytest -v
+      - name: Compile Python sources
+        run: python -m compileall -q admet_predictor cli.py pharmacokinetics.py
 
-    - name: Verify CLI Smoke Test
-      run: |
-        python cli.py evaluate --mw 320.5 --logp 2.8 --json
-        python cli.py batch --input sample.csv --output out_smoke.csv
+      - name: Run test suite
+        run: pytest -q
 
+      - name: Verify CLI workflows
+        run: |
+          python cli.py evaluate --mw 320.5 --logp 2.8 --json > /dev/null
+          python cli.py pk-sim --route oral --dose 100 --f 0.85 --json > /dev/null
+          python cli.py pk-sim --route multi --dose 250 --f 0.8 --ka 1 --ke 0.1 --vd 30 --tau 12 --doses 7 --json > /dev/null
+          python cli.py batch --input sample.csv --output out_smoke.csv
