@@ -11,8 +11,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import os
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from typing import Optional, List
 
@@ -56,12 +56,12 @@ def format_report_text(report) -> str:
         f"  - Muegge (Bayer):       {'PASS' if report.muegge.passes else 'FAIL'} ({report.muegge.violations} violation(s))",
         f"  - Lead-Likeness:        {'PASS' if report.lead_likeness.passes else 'FAIL'}",
         "-" * 78,
-        "Quantitative Metrics:",
-        f"  - QED Score:            {report.qed.qed_score:.3f} [{report.qed.druglikeness_grade}]",
+        "Screening Metrics:",
+        f"  - QED-like Score:       {report.qed.qed_score:.3f} [{report.qed.druglikeness_grade}]",
         f"  - CNS MPO Score:        {report.cns_mpo.score:.2f} / 6.00 [{report.cns_mpo.cns_permeability_likelihood}]",
         f"  - Predicted LogBB:      {report.cns_mpo.logbb_pred:.3f}",
         "-" * 78,
-        "ADMET Profiling Estimates:",
+        "Heuristic ADMET Screening Estimates:",
         f"  - Human Intestinal Absorption (HIA):  {report.admet_prediction.hia_pct:.1f}%",
         f"  - Caco-2 Apparent Permeability:       {report.admet_prediction.caco2_perm_cm_s:.2f} x 10^-6 cm/s ({report.admet_prediction.caco2_class})",
         f"  - Plasma Protein Binding (PPB):       {report.admet_prediction.ppb_pct:.1f}% (Fraction unbound fu = {report.admet_prediction.fraction_unbound:.3f})",
@@ -74,7 +74,7 @@ def format_report_text(report) -> str:
         f"  - Safety: DILI Hepatotoxicity:        {report.admet_prediction.dili_risk}",
         f"  - Safety: Ames Mutagenicity:          {report.admet_prediction.ames_mutagenicity}",
         "=" * 78,
-        f"OVERALL DEVELOPABILITY SCORE: {report.overall_druglikeness_score:.1f} / 100",
+        f"RULE-BASED SCREENING SCORE: {report.overall_druglikeness_score:.1f} / 100",
         f"Assessment: {report.overall_assessment}",
     ]
     if report.recommendations:
@@ -171,7 +171,32 @@ def run_interactive():
         except Exception as e:
             print(f"Error: {e}")
 
-    elif choice in ("4", "5", "6"):
+    elif choice == "4":
+        try:
+            dose = float(input("Dose (mg) [100.0]: ").strip() or "100.0")
+            ke = float(input("Elimination rate ke (1/hr) [0.15]: ").strip() or "0.15")
+            vd = float(input("Volume of distribution Vd (L) [20.0]: ").strip() or "20.0")
+            dur = float(input("Simulation Duration (hr) [24.0]: ").strip() or "24.0")
+            sim = PharmacokineticSimulator.simulate_iv_bolus(dose, ke, vd, dur)
+            print(f"IV bolus: Cmax={sim.cmax_mg_l:.4f} mg/L, t1/2={sim.half_life_hr:.2f} hr, AUC={sim.auc_0_inf_mg_hr_l:.2f} mg*hr/L")
+        except Exception as e:
+            print(f"Error: {e}")
+
+    elif choice == "5":
+        try:
+            dose = float(input("Dose (mg) [250.0]: ").strip() or "250.0")
+            f = float(input("Bioavailability F (0-1) [0.8]: ").strip() or "0.8")
+            ka = float(input("Absorption rate ka (1/hr) [1.0]: ").strip() or "1.0")
+            ke = float(input("Elimination rate ke (1/hr) [0.1]: ").strip() or "0.1")
+            vd = float(input("Volume of distribution Vd (L) [30.0]: ").strip() or "30.0")
+            tau = float(input("Dosing interval tau (hr) [12.0]: ").strip() or "12.0")
+            doses = int(input("Number of simulated doses [7]: ").strip() or "7")
+            sim = PharmacokineticSimulator.simulate_oral_multiple(dose, f, ka, ke, vd, tau, doses)
+            print(f"Multiple oral dosing: steady-state Cmax={sim.c_ss_max_mg_l:.4f} mg/L, Cmin={sim.c_ss_min_mg_l:.4f} mg/L, Cavg={sim.c_ss_avg_mg_l:.4f} mg/L")
+        except Exception as e:
+            print(f"Error: {e}")
+
+    elif choice == "6":
         run_demo()
 
     return 0
@@ -263,9 +288,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.interactive or (not args.command and not args.demo):
-        if not args.demo and (argv is None or len(argv) == 0):
-            return run_interactive()
+    if args.interactive:
+        return run_interactive()
+    if not args.command and not args.demo:
+        return run_interactive()
 
     if args.demo:
         return run_demo(as_json=args.json)
@@ -305,9 +331,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.command == "batch":
         try:
-            # Resolve and validate paths to prevent path traversal
             input_path = Path(args.input).resolve()
             output_path = Path(args.output).resolve()
+
+            if input_path == output_path:
+                print("Error: Input and output CSV paths must be different.", file=sys.stderr)
+                return 1
 
             # Ensure input file exists and is a file
             if not input_path.is_file():
@@ -421,7 +450,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"  - Total AUC (0-inf):          {res.auc_0_inf_mg_hr_l:.2f} mg*hr/L")
             if res.c_ss_avg_mg_l is not None:
                 print(f"  - Steady-State Average (Css): {res.c_ss_avg_mg_l:.4f} mg/L")
-                print(f"  - Accumulation Ratio (R):     {res.accumulation_ratio:.2f}")
+                print(f"  - Steady-State Maximum:       {res.c_ss_max_mg_l:.4f} mg/L")
+                print(f"  - Steady-State Minimum:       {res.c_ss_min_mg_l:.4f} mg/L")
+                print(f"  - Peak Accumulation Ratio:    {res.accumulation_ratio:.2f}")
             print("=" * 60)
         return 0
 
