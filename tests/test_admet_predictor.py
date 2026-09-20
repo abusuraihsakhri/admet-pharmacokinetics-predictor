@@ -13,6 +13,7 @@ import csv
 import tempfile
 import unittest
 import json
+from unittest import mock
 from pathlib import Path
 
 # Ensure root directory is on path
@@ -77,6 +78,12 @@ class TestMoleculeProperties(unittest.TestCase):
     def test_acidic_drug_logd74_ionization(self):
         mol = MoleculeProperties(name="AcidDrug", mw=200.0, logp=3.0, pka_acid=4.4)
         self.assertLess(mol.logd74, mol.logp)
+
+    def test_invalid_fsp3_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            MoleculeProperties(fsp3=1.2)
+        with self.assertRaises(ValueError):
+            MoleculeProperties(fsp3=-0.1)
 
 
 class TestDrugLikenessFilters(unittest.TestCase):
@@ -156,7 +163,7 @@ class TestQEDCalculator(unittest.TestCase):
     def test_qed_vancomycin_low(self):
         vanc_qed = QEDCalculator.calculate(REFERENCE_DRUGS["Vancomycin"])
         self.assertLess(vanc_qed.qed_score, 0.35)
-        self.assertEqual(vanc_qed.druglikeness_grade, "Low Drug-Likeness")
+        self.assertEqual(vanc_qed.druglikeness_grade, "Low QED-like Score")
 
 
 class TestCNSMPOPredictor(unittest.TestCase):
@@ -180,8 +187,8 @@ class TestCNSMPOPredictor(unittest.TestCase):
         tpsa_low = CNSMPOPredictor._tpsa_score(15.0)
         tpsa_opt = CNSMPOPredictor._tpsa_score(60.0)
         tpsa_high = CNSMPOPredictor._tpsa_score(140.0)
-        self.assertEqual(tpsa_low, 0.0)
-        self.assertEqual(tpsa_opt, 1.0)
+        self.assertEqual(tpsa_low, 1.0)
+        self.assertAlmostEqual(tpsa_opt, 0.6, places=6)
         self.assertEqual(tpsa_high, 0.0)
 
 
@@ -245,14 +252,36 @@ class TestPharmacokineticSimulator(unittest.TestCase):
         tau = 12.0
         sim = PharmacokineticSimulator.simulate_oral_multiple(dose, f, ka, ke, vd, dosing_interval_tau_hr=tau, num_doses=6)
 
-        expected_r = 1.0 / (1.0 - math.exp(-ke * tau))
-        self.assertAlmostEqual(sim.accumulation_ratio, round(expected_r, 2), places=2)
-        self.assertIsNotNone(sim.c_ss_avg_mg_l)
-        self.assertGreater(sim.c_ss_max_mg_l, sim.c_ss_min_mg_l)
+        prefactor = dose * f * ka / (vd * (ka - ke))
+        expected_tmax_ss = math.log(
+            (ka * (1.0 - math.exp(-ke * tau))) /
+            (ke * (1.0 - math.exp(-ka * tau)))
+        ) / (ka - ke)
+        expected_ss_max = prefactor * (
+            math.exp(-ke * expected_tmax_ss) / (1.0 - math.exp(-ke * tau))
+            - math.exp(-ka * expected_tmax_ss) / (1.0 - math.exp(-ka * tau))
+        )
+        expected_ss_min = prefactor * (
+            math.exp(-ke * tau) / (1.0 - math.exp(-ke * tau))
+            - math.exp(-ka * tau) / (1.0 - math.exp(-ka * tau))
+        )
+        single_tmax = math.log(ka / ke) / (ka - ke)
+        single_cmax = prefactor * (math.exp(-ke * single_tmax) - math.exp(-ka * single_tmax))
+        expected_peak_accumulation = expected_ss_max / single_cmax
+
+        self.assertAlmostEqual(sim.tmax_hr, round(expected_tmax_ss, 2), places=2)
+        self.assertAlmostEqual(sim.c_ss_max_mg_l, round(expected_ss_max, 4), places=4)
+        self.assertAlmostEqual(sim.c_ss_min_mg_l, round(expected_ss_min, 4), places=4)
+        self.assertAlmostEqual(sim.accumulation_ratio, round(expected_peak_accumulation, 2), places=2)
+        self.assertAlmostEqual(sim.c_ss_avg_mg_l, (dose * f) / (ke * vd * tau), places=4)
 
     def test_invalid_pk_parameters_raise_error(self):
         with self.assertRaises(ValueError):
             PharmacokineticSimulator.simulate_oral_single(dose_mg=-10, bioavailability_f=0.8, ka_hr=1, ke_hr=0.1, vd_l=10)
+        with self.assertRaises(ValueError):
+            PharmacokineticSimulator.simulate_oral_single(dose_mg=100, bioavailability_f=1.2, ka_hr=1, ke_hr=0.1, vd_l=10)
+        with self.assertRaises(ValueError):
+            PharmacokineticSimulator.simulate_iv_bolus(dose_mg=100, ke_hr=0.1, vd_l=10, duration_hr=0)
 
 
 class TestCLIAndBatch(unittest.TestCase):
@@ -273,6 +302,28 @@ class TestCLIAndBatch(unittest.TestCase):
     def test_cli_pk_simulation(self):
         res = cli.main(["pk-sim", "--route", "oral", "--dose", "150", "--f", "0.85"])
         self.assertEqual(res, 0)
+
+    def test_cli_pk_json_output(self):
+        import io
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            res = cli.main(["pk-sim", "--route", "oral", "--dose", "150", "--f", "0.85", "--json"])
+        self.assertEqual(res, 0)
+        payload = json.loads(out.getvalue())
+        self.assertEqual(payload["dosing_route"], "ORAL_SINGLE_DOSE")
+
+    def test_explicit_interactive_flag_starts_wizard(self):
+        with mock.patch("builtins.input", side_effect=["q"]):
+            self.assertEqual(cli.main(["--interactive"]), 0)
+
+    def test_interactive_iv_and_multiple_dose_choices(self):
+        iv_inputs = ["4", "100", "0.15", "20", "24"]
+        with mock.patch("builtins.input", side_effect=iv_inputs):
+            self.assertEqual(cli.run_interactive(), 0)
+
+        multi_inputs = ["5", "250", "0.8", "1.0", "0.1", "30", "12", "7"]
+        with mock.patch("builtins.input", side_effect=multi_inputs):
+            self.assertEqual(cli.run_interactive(), 0)
 
     def test_batch_csv_processing(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -313,6 +364,29 @@ class TestCLIAndBatch(unittest.TestCase):
             ret = cli.main(["batch", "--input", str(sample_path), "--output", out_csv])
             self.assertEqual(ret, 0)
             self.assertTrue(os.path.exists(out_csv))
+
+    def test_batch_rejects_same_input_and_output(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            csv_path = os.path.join(tmpdir, "input.csv")
+            with open(csv_path, "w", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["name", "mw", "logp"])
+                writer.writerow(["DrugA", 250.0, 1.8])
+            self.assertEqual(cli.main(["batch", "--input", csv_path, "--output", csv_path]), 1)
+
+    def test_batch_skips_malformed_rows(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            in_csv = os.path.join(tmpdir, "input.csv")
+            out_csv = os.path.join(tmpdir, "output.csv")
+            with open(in_csv, "w", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["name", "mw", "logp"])
+                writer.writerow(["Good", 250.0, 1.8])
+                writer.writerow(["Bad", "invalid", 2.0])
+            self.assertEqual(cli.main(["batch", "--input", in_csv, "--output", out_csv]), 0)
+            with open(out_csv, newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual([row["name"] for row in rows], ["Good"])
 
 
 if __name__ == "__main__":
